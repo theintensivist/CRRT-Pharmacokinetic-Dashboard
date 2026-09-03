@@ -343,7 +343,7 @@ function Home() {
     calculated.status === 'within target'
       ? 'bg-primary/10 text-primary'
       : calculated.status === 'above target'
-        ? 'bg-accent/15 text-[#a45b18]'
+        ? 'bg-accent/15 text-[#f0aa68]'
         : 'bg-destructive/10 text-destructive';
 
   return (
@@ -352,9 +352,14 @@ function Home() {
         <aside className="dashboard-sidebar sidebar-grid w-full shrink-0 px-4 py-4 md:w-[318px] md:px-5 md:py-6">
           <div className="flex items-start justify-between">
             <div>
-              <div className="eyebrow text-teal-200/70">Bedside reference</div>
+              <div className="flex items-center gap-2">
+                <div className="eyebrow text-[#efbd83]/70">Bedside reference</div>
+                <span className="friend-dots" aria-label="Warm café color accents">
+                  <i /><i /><i />
+                </span>
+              </div>
               <div className="mt-1 flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#5ac9bd] text-[#102d31]">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#d8a0c8] text-[#2c1e31]">
                   <Activity size={18} strokeWidth={2.5} />
                 </span>
                 <div>
@@ -365,7 +370,7 @@ function Home() {
             </div>
             <button
               type="button"
-              className="icon-button border-slate-600/70 bg-slate-900/20 text-slate-400 hover:bg-slate-800 hover:text-[#79d9cd]"
+              className="icon-button border-slate-600/70 bg-slate-900/20 text-slate-400 hover:bg-slate-800 hover:text-[#d8a0c8]"
               data-testid="button-reset-top"
               aria-label="Reset simulation"
               title="Reset simulation"
@@ -375,10 +380,10 @@ function Home() {
             </button>
           </div>
 
-          <div className="mt-6 rounded-lg border border-[#5ac9bd]/20 bg-[#5ac9bd]/[.07] p-3">
+          <div className="mt-6 rounded-lg border border-[#d8a0c8]/25 bg-[#d8a0c8]/[.07] p-3">
             <div className="flex items-center gap-2">
-              <span className="live-dot h-2 w-2 rounded-full bg-[#79d9cd]" />
-              <span className="eyebrow text-[#9de4da]">Live model</span>
+              <span className="live-dot h-2 w-2 rounded-full bg-[#efbd83]" />
+              <span className="eyebrow text-[#efbd83]">Live model</span>
               <span className="ml-auto mono text-[10px] text-slate-400">72 h horizon</span>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-slate-300">
@@ -411,7 +416,7 @@ function Home() {
                      <div className="mt-2 rounded-md border border-slate-700/80 bg-slate-900/25 px-2.5 py-2">
                        <div className="flex items-center justify-between gap-2">
                          <span className="text-[10px] font-semibold text-slate-300">{selectedDrug.className}</span>
-                         <span className="eyebrow text-[#79d9cd]">reference set</span>
+                         <span className="eyebrow text-[#d8a0c8]">reference set</span>
                        </div>
                        <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{selectedDrug.renalHandling}</p>
                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
@@ -421,7 +426,7 @@ function Home() {
                              href={source.url}
                              target="_blank"
                              rel="noreferrer"
-                             className="text-[9px] font-semibold text-[#79d9cd] underline decoration-[#79d9cd]/40 underline-offset-2 hover:text-white"
+                             className="text-[9px] font-semibold text-[#d8a0c8] underline decoration-[#d8a0c8]/40 underline-offset-2 hover:text-white"
                            >
                              {source.label}
                            </a>
@@ -514,7 +519,7 @@ function Home() {
                           data-testid={`button-dilution-${site}`}
                            aria-pressed={form.dilutionMode === site}
                            className={`rounded px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                             form.dilutionMode === site ? 'bg-slate-600 text-[#9de4da]' : 'text-slate-400 hover:text-slate-200'
+                             form.dilutionMode === site ? 'bg-slate-600 text-[#efbd83]' : 'text-slate-400 hover:text-slate-200'
                           }`}
                            onClick={() => setForm((current) => ({ ...current, dilutionMode: site }))}
                         >
@@ -530,7 +535,7 @@ function Home() {
                   </div>
                 ) : (
                   <div className="flex gap-2 rounded-md border border-slate-700/80 bg-slate-900/25 p-2.5 text-[10px] leading-relaxed text-slate-400">
-                    <Info size={14} className="mt-0.5 shrink-0 text-[#79d9cd]" />
+                    <Info size={14} className="mt-0.5 shrink-0 text-[#d8a0c8]" />
                     <span>Dilution is not applied to the CVVHD dialysate clearance estimate.</span>
                   </div>
                 )}
@@ -542,7 +547,7 @@ function Home() {
         <main className="dashboard-main min-w-0 flex-1 px-4 py-5 sm:px-6 md:px-8 md:py-7">
           <header className="fade-up flex flex-col justify-between gap-4 border-b border-border/80 pb-5 sm:flex-row sm:items-end">
             <div>
-              <div className="eyebrow">Clinical calculation surface / 01</div>
+              <div className="eyebrow">The one with the PK profile / 01</div>
               <h1 className="mt-1 text-[clamp(24px,3vw,36px)] font-bold tracking-[-0.055em] text-foreground">
                 CRRT pharmacokinetic dashboard
               </h1>
@@ -576,7 +581,7 @@ function Home() {
               <div className="mt-2 text-[10px] text-muted-foreground">Endogenous + extracorporeal</div>
             </div>
             <div className="section-card rounded-xl border-accent/30 p-4" data-testid="metric-24h-concentration">
-              <div className="eyebrow text-[#a45b18]">24 h with CRRT</div>
+              <div className="eyebrow text-[#f0aa68]">24 h with CRRT</div>
               <div className="mt-3 metric-value metric-warm">{formatNumber(calculated.at24, 2)} <span className="text-[12px] tracking-normal text-muted-foreground">mg/L</span></div>
               <div className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${statusClass}`}>{calculated.status}</div>
             </div>
@@ -603,12 +608,12 @@ function Home() {
                   <CartesianGrid vertical={false} className="chart-grid-line" />
                   <XAxis dataKey="hour" tickLine={false} axisLine={false} tick={{ fill: 'hsl(215 16% 46%)', fontSize: 10, fontFamily: 'IBM Plex Mono' }} tickFormatter={(value) => `${value}h`} />
                   <YAxis domain={[0, calculated.yMax]} tickLine={false} axisLine={false} width={44} tick={{ fill: 'hsl(215 16% 46%)', fontSize: 10, fontFamily: 'IBM Plex Mono' }} tickFormatter={(value) => formatNumber(value, value < 10 ? 1 : 0)} />
-                  <Tooltip content={<ClinicalTooltip />} cursor={{ stroke: 'hsl(178 62% 37% / .25)', strokeWidth: 1 }} />
+                  <Tooltip content={<ClinicalTooltip />} cursor={{ stroke: 'hsl(277 35% 70% / .25)', strokeWidth: 1 }} />
                   <ReferenceArea y1={calculated.targetLow} y2={calculated.targetHigh} fill="hsl(24 78% 61% / .13)" strokeOpacity={0} />
                   <ReferenceLine y={calculated.targetLow} stroke="hsl(24 78% 61% / .65)" strokeDasharray="4 4" />
                   <ReferenceLine y={calculated.targetHigh} stroke="hsl(24 78% 61% / .65)" strokeDasharray="4 4" />
                   <Line type="monotone" dataKey="withoutCrrt" stroke="#7b8798" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 4, fill: '#7b8798', strokeWidth: 0 }} />
-                  <Line type="monotone" dataKey="withCrrt" stroke="hsl(178 62% 37%)" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: 'hsl(178 62% 37%)', strokeWidth: 2, stroke: 'hsl(210 35% 99%)' }} />
+                  <Line type="monotone" dataKey="withCrrt" stroke="hsl(277 35% 70%)" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: 'hsl(277 35% 70%)', strokeWidth: 2, stroke: 'hsl(274 22% 10%)' }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

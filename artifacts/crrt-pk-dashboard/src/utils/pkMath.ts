@@ -1,5 +1,6 @@
 export type CrrtModality = 'CVVH' | 'CVVHD';
 export type DilutionMode = 'pre' | 'post';
+export type TargetStatus = 'below target' | 'within target' | 'above target';
 
 export interface PkInputs {
   vdLPerKg: number;
@@ -32,6 +33,16 @@ export interface ConcentrationPoint {
   time: number;
   withCrrt: number;
   withoutCrrt: number;
+}
+
+export function getTargetStatus(
+  concentration: number,
+  targetLow: number,
+  targetHigh: number,
+): TargetStatus {
+  if (concentration < targetLow) return 'below target';
+  if (concentration > targetHigh) return 'above target';
+  return 'within target';
 }
 
 const MINUTES_PER_HOUR = 60;

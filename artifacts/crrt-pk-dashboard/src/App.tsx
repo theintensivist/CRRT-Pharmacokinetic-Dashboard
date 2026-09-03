@@ -25,6 +25,7 @@ import {
 import {
   calculateSummary,
   generateConcentrationProfile,
+  getTargetStatus,
   type CrrtModality,
   type DilutionMode,
   type PkInputs,
@@ -286,6 +287,9 @@ function Home() {
     setShowAssumptions(true);
   };
 
+  const selectedDrug: DrugReference | null =
+    form.drugId === 'custom' ? null : findDrug(form.drugId);
+
   const calculated = useMemo(() => {
     const inputs: PkInputs = {
       vdLPerKg: Math.max(form.vdLPerKg, 0.01),
@@ -306,15 +310,10 @@ function Home() {
       withCrrt: point.withCrrt,
       withoutCrrt: point.withoutCrrt,
     }));
-    const targetLow = 8;
-    const targetHigh = 16;
+    const targetLow = selectedDrug?.targetRange.low ?? 8;
+    const targetHigh = selectedDrug?.targetRange.high ?? 16;
     const at24 = profile[24]?.withCrrt ?? 0;
-    const status =
-      at24 < targetLow
-        ? 'below target'
-        : at24 > targetHigh
-          ? 'above target'
-          : 'within target';
+    const status = getTargetStatus(at24, targetLow, targetHigh);
 
     return {
       inputs,
@@ -335,10 +334,7 @@ function Home() {
       status,
       yMax: Math.max(curve[0]?.withCrrt ?? 0, targetHigh * 1.35, 1),
     };
-  }, [form]);
-
-  const selectedDrug: DrugReference | null =
-    form.drugId === 'custom' ? null : findDrug(form.drugId);
+  }, [form, selectedDrug]);
   const statusClass =
     calculated.status === 'within target'
       ? 'bg-primary/10 text-primary'
@@ -419,7 +415,25 @@ function Home() {
                          <span className="eyebrow text-[#d8a0c8]">reference set</span>
                        </div>
                        <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{selectedDrug.renalHandling}</p>
-                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                       <div className="mt-2 rounded border border-accent/25 bg-accent/5 px-2 py-1.5">
+                         <div className="flex items-center justify-between gap-2">
+                           <span className="eyebrow text-[#c88950]">Target window</span>
+                           <span className="mono text-[10px] font-semibold text-[#e0a66d]">
+                             {selectedDrug.targetRange.low}–{selectedDrug.targetRange.high} mg/L
+                           </span>
+                         </div>
+                         <div className="mt-1 text-[9px] leading-relaxed text-slate-400">{selectedDrug.targetType}</div>
+                         <a
+                           href={selectedDrug.targetSource.url}
+                           target="_blank"
+                           rel="noreferrer"
+                           className="mt-1 inline-block text-[9px] font-semibold text-[#e0a66d] underline decoration-[#e0a66d]/40 underline-offset-2 hover:text-white"
+                         >
+                           Target source: {selectedDrug.targetSource.label}
+                         </a>
+                       </div>
+                       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                         <span className="eyebrow text-slate-500">PK sources</span>
                          {selectedDrug.sources.map((source) => (
                            <a
                              key={source.url}
@@ -594,12 +608,14 @@ function Home() {
                   <h2 className="text-[14px] font-bold tracking-tight text-foreground">Concentration over time</h2>
                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] text-primary">72 hours</span>
                 </div>
-               <p className="mt-1 text-[11px] text-muted-foreground">Projected repeated bolus profile · target band 8–16 mg/L · immediate distribution</p>
+               <p className="mt-1 text-[11px] text-muted-foreground">
+                 Projected repeated bolus profile · target band {calculated.targetLow}–{calculated.targetHigh} mg/L · {selectedDrug?.targetType ?? 'illustrative reference window'} · immediate distribution
+               </p>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-muted-foreground">
                 <span className="flex items-center gap-2"><i className="h-0.5 w-5 bg-primary" /> With CRRT</span>
                 <span className="flex items-center gap-2"><i className="h-0.5 w-5 bg-[#7b8798]" /> Without CRRT</span>
-                <span className="flex items-center gap-2"><i className="h-2.5 w-5 rounded-sm bg-accent/30 ring-1 ring-accent/35" /> Target band</span>
+                 <span className="flex items-center gap-2"><i className="h-2.5 w-5 rounded-sm bg-accent/30 ring-1 ring-accent/35" /> Target band ({calculated.targetLow}–{calculated.targetHigh} mg/L)</span>
               </div>
             </div>
             <div className="chart-wrap mt-5 -ml-3 sm:-ml-1">

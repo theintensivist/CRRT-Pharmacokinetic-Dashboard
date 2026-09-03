@@ -1,0 +1,1 @@
+- [CRRT PK model assumptions](crrt-pk-model.md) — keep endogenous clearance and membrane/dilution assumptions explicit when extending the clinical model.

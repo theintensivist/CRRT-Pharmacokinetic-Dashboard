@@ -1,6 +1,6 @@
-# [Project name]
+# CRRT Pharmacokinetic Dashboard
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+An interactive clinical reference surface for comparing modeled drug concentrations with and without continuous renal replacement therapy.
 
 ## Run & Operate
 
@@ -22,23 +22,29 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/crrt-pk-dashboard/src/App.tsx` — responsive dashboard UI and local interaction state
+- `artifacts/crrt-pk-dashboard/src/utils/pkMath.ts` — auditable clearance and repeated-bolus concentration model
+- `artifacts/crrt-pk-dashboard/src/index.css` — dashboard theme, dark clinical palette, and responsive layout
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- This first version is client-side only; calculations update immediately from local state and require no API or database.
+- Endogenous clearance is entered directly in mL/min to avoid silently deriving a different renal-function estimate from demographics.
+- Sc and Sa are approximated from the unbound fraction; CVVH pre-filter dilution uses an explicit 0.75 factor because blood flow and replacement-fluid rates are not part of the requested inputs.
+- Repeated boluses are modeled with first-order elimination and plotted against an illustrative 8–16 mg/L target band.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The dashboard accepts drug, patient, and CRRT prescription inputs; supports CVVH/CVVHD and CVVH pre/post-filter toggles; and renders a 72-hour concentration comparison, clearance metrics, checkpoints, and assumptions/disclaimer details.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+No additional preferences recorded.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The concentration model is for clinical reference and exploration only; it does not replace therapeutic drug monitoring, local protocols, or clinical judgment.
+- The standalone Vite build needs `PORT` and `BASE_PATH`; the managed artifact workflow provides them automatically.
 
 ## Pointers
 

@@ -1,0 +1,66 @@
+Here is the dedicated prompt engineered to build the interactive pharmacokinetic application. You can paste this directly into Claude, Google Antigravity, or Replit to generate the code for the tool.
+
+---
+
+**Copy and paste the following into your AI coding tool:**
+
+You are an elite Full-Stack Medical Software Engineer and a specialized Critical Care Pharmacist. Your task is to build a client-side, interactive web application that visualizes drug pharmacokinetics (PK) and concentration changes during Continuous Renal Replacement Therapy (CRRT) in critically ill patients.
+
+This application will be embedded via iframe into a clinical reference Notion workspace (`myICUnotes.com` via Super.so), so it must be responsive, clean, and function entirely in the browser.
+
+**TECH STACK & ARCHITECTURE:**
+
+* **Framework:** React (using functional components and hooks).
+* **Styling:** Tailwind CSS (Dark mode optimized to match a modern Notion aesthetic).
+* **Data Visualization:** Recharts (or Chart.js) for responsive, real-time line graphing.
+* **Deployment Target:** Must be structured to run instantly in a Replit React environment or Google Antigravity.
+
+**MATHEMATICAL & CLINICAL ENGINE:**
+Do not hallucinate PK formulas. Use established pharmacokinetic principles for extracorporeal clearance. The underlying logic must calculate total drug clearance ($CL_{total}$) as the sum of endogenous clearance ($CL_{endo}$) and CRRT clearance ($CL_{CRRT}$).
+
+* **$CL_{CRRT}$ for Hemofiltration (Convection):** Calculate based on Ultrafiltration rate ($Qf$) and the drug's Sieving Coefficient ($Sc$). Adjust for pre-filter vs. post-filter dilution (calculate the hemodilution factor).
+* **$CL_{CRRT}$ for Hemodialysis (Diffusion):** Calculate based on Dialysate flow rate ($Qd$) and the Saturation Coefficient ($Sa$).
+* **Sieving/Saturation Coefficient Estimation:** If exact $Sc$ is unknown, approximate using the drug's protein binding percentage ($Pb$): $Sc \approx 1 - (Pb / 100)$, assuming the molecular weight easily passes the membrane.
+
+**UI/UX & INTERACTIVITY REQUIREMENTS:**
+Design a clean, two-panel dashboard layout:
+
+**Panel 1: Clinical Input Controls (Sliders and Toggles)**
+
+* **Drug Profile:**
+* Volume of Distribution ($Vd$) in L/kg.
+* Protein Binding (%).
+* Molecular Weight (Daltons).
+* Dosing Regimen (Bolus dose in mg, Dosing interval in hours).
+
+
+* **Patient Parameters:**
+* Patient Weight (kg).
+* Residual Endogenous Clearance (mL/min).
+
+
+* **CRRT Prescription:**
+* Modality Toggle: CVVH vs. CVVHD.
+* Effluent Flow Rate (mL/kg/h).
+* Dilution Toggle (CVVH only): Pre-filter vs. Post-filter.
+
+
+
+**Panel 2: Real-Time Visualization**
+
+* Render a 72-hour concentration-time curve (Line Chart).
+* The X-axis represents Time (hours).
+* The Y-axis represents Plasma Drug Concentration (mg/L).
+* Plot two distinct curves for visual comparison:
+1. Drug concentration *with* the selected CRRT settings.
+2. Drug concentration *without* CRRT (endogenous clearance only).
+
+
+* Include a shaded horizontal band representing the "Therapeutic Target Window" (e.g., Minimum Inhibitory Concentration for antibiotics).
+
+**OUTPUT REQUIREMENTS:**
+Provide all necessary code (e.g., `App.jsx`, `utils/pkMath.js`). Ensure the math logic is separated from the UI components for easy debugging. Include inline comments explaining the PK formulas used. Keep the design minimalist, professional, and dark-themed.
+
+---
+
+Once you generate this code in Replit or Antigravity, you can host the live link and embed it directly into your Notion page by typing `/embed` and pasting the URL.

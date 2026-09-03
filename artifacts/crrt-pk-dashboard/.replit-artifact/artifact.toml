@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CRRT Pharmacokinetic Dashboard"
+description = "An interactive clinical reference dashboard that models drug concentration over 72 hours with and without continuous renal replacement therapy, comparing CVVH and CVVHD prescriptions with auditable pharmacokinetic calculations."
+version = "1.0.0"
+id = "artifacts/crrt-pk-dashboard"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23162
+
+[services.development]
+run = "pnpm --filter @workspace/crrt-pk-dashboard run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/crrt-pk-dashboard", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/crrt-pk-dashboard/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23162"
+BASE_PATH = "/"

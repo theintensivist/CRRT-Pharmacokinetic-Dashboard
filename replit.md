@@ -24,11 +24,13 @@ An interactive clinical reference surface for comparing modeled drug concentrati
 
 - `artifacts/crrt-pk-dashboard/src/App.tsx` — responsive dashboard UI and local interaction state
 - `artifacts/crrt-pk-dashboard/src/utils/pkMath.ts` — auditable clearance and repeated-bolus concentration model
+- `artifacts/crrt-pk-dashboard/src/data/drugDatabase.ts` — built-in ICU drug reference set with PK defaults and source links
 - `artifacts/crrt-pk-dashboard/src/index.css` — dashboard theme, dark clinical palette, and responsive layout
 
 ## Architecture decisions
 
 - This first version is client-side only; calculations update immediately from local state and require no API or database.
+- The ICU drug catalog is intentionally bundled with the app so the reference values remain available inside an iframe without network access to a drug database.
 - Endogenous clearance is entered directly in mL/min to avoid silently deriving a different renal-function estimate from demographics.
 - Sc and Sa are approximated from the unbound fraction; CVVH pre-filter dilution uses an explicit 0.75 factor because blood flow and replacement-fluid rates are not part of the requested inputs.
 - Repeated boluses are modeled with first-order elimination and plotted against an illustrative 8–16 mg/L target band.

@@ -29,6 +29,12 @@ import {
   type DilutionMode,
   type PkInputs,
 } from '@/utils/pkMath';
+import {
+  DEFAULT_DRUG,
+  ICU_DRUG_DATABASE,
+  findDrug,
+  type DrugReference,
+} from '@/data/drugDatabase';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -50,6 +56,7 @@ type NumericField =
   ;
 
 type FormState = {
+  drugId: string;
   drugName: string;
   dose: number;
   vdLPerKg: number;
@@ -70,12 +77,13 @@ type TooltipPayload = {
 };
 
 const initialForm: FormState = {
-  drugName: 'Vancomycin',
-  dose: 1250,
-  vdLPerKg: 0.97,
-  proteinBinding: 45,
-  molecularWeight: 1449,
-  interval: 12,
+  drugId: DEFAULT_DRUG.id,
+  drugName: DEFAULT_DRUG.name,
+  dose: DEFAULT_DRUG.defaultDoseMg,
+  vdLPerKg: DEFAULT_DRUG.vdLPerKg,
+  proteinBinding: DEFAULT_DRUG.proteinBindingPercent,
+  molecularWeight: DEFAULT_DRUG.molecularWeightDa,
+  interval: DEFAULT_DRUG.defaultIntervalHours,
   weight: 74,
   residualClearance: 14,
   modality: 'CVVH' as CrrtModality,
@@ -83,9 +91,40 @@ const initialForm: FormState = {
   dilutionMode: 'pre' as DilutionMode,
 };
 
+const glossary: Record<string, string> = {
+  'Bolus dose': 'The amount given at each dose time in this simplified model.',
+  'Dosing interval': 'How often the bolus is repeated, measured in hours.',
+  'Vd per kg': 'Volume of distribution per kilogram: a rough measure of how widely the drug spreads beyond the bloodstream.',
+  'Protein binding': 'The percentage attached to proteins. The unbound portion is the part assumed available to cross the CRRT membrane.',
+  'Molecular weight': 'The size of one drug molecule. Higher values make the membrane-passage approximation less certain.',
+  'Patient weight': 'Body weight used to convert the prescribed effluent rate into an hourly flow.',
+  'Residual clearance': 'Clearance that remains from the patient’s own kidneys, entered directly in mL/min.',
+  'Effluent flow': 'The CRRT fluid removal rate used as the effective convective or diffusive flow.',
+  Modality: 'The CRRT technique being modeled: CVVH removes solute mainly by convection, while CVVHD uses diffusion.',
+  'CVVH': 'Continuous venovenous hemofiltration: clearance is modeled mainly by convection across the filter.',
+  'CVVHD': 'Continuous venovenous hemodialysis: clearance is modeled mainly by diffusion into dialysate.',
+  'Pre-filter': 'Replacement fluid enters before the filter and dilutes blood reaching the membrane.',
+  'Post-filter': 'Replacement fluid enters after the filter and does not dilute the blood crossing the membrane.',
+};
+
 function formatNumber(value: number, digits = 1) {
   if (!Number.isFinite(value)) return '—';
   return value.toFixed(digits);
+}
+
+function TermHelp({ term }: { term: string }) {
+  const description = glossary[term];
+  if (!description) return null;
+
+  return (
+    <span className="term-help" tabIndex={0} aria-label={`Help for ${term}`}>
+      <CircleHelp size={12} strokeWidth={2.2} />
+      <span className="term-tooltip" role="tooltip">
+        <strong>{term}</strong>
+        <span>{description}</span>
+      </span>
+    </span>
+  );
 }
 
 function ClinicalTooltip({
@@ -121,6 +160,7 @@ function NumberField({
   max,
   step = 1,
   range,
+  help,
   onChange,
 }: {
   id: string;
@@ -131,11 +171,15 @@ function NumberField({
   max?: number;
   step?: number;
   range?: { min: number; max: number; step?: number };
+  help?: string;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <label htmlFor={id}>
-      <span className="input-label">{label}</span>
+      <span className="input-label inline-flex items-center gap-1.5">
+        {label}
+        {help ? <TermHelp term={help} /> : null}
+      </span>
       <div className="input-unit">
         <input
           id={id}
@@ -198,8 +242,18 @@ function Home() {
     setForm((current) => ({ ...current, [key]: Number.isFinite(nextValue) ? nextValue : 0 }));
   };
 
-  const updateText = (event: ChangeEvent<HTMLInputElement>) => {
-    setForm((current) => ({ ...current, drugName: event.target.value }));
+  const selectDrug = (event: ChangeEvent<HTMLSelectElement>) => {
+    const drug = findDrug(event.target.value);
+    setForm((current) => ({
+      ...current,
+      drugId: drug.id,
+      drugName: drug.name,
+      dose: drug.defaultDoseMg,
+      vdLPerKg: drug.vdLPerKg,
+      proteinBinding: drug.proteinBindingPercent,
+      molecularWeight: drug.molecularWeightDa,
+      interval: drug.defaultIntervalHours,
+    }));
   };
 
   const reset = () => {
@@ -258,6 +312,7 @@ function Home() {
     };
   }, [form]);
 
+  const selectedDrug: DrugReference = findDrug(form.drugId);
   const statusClass =
     calculated.status === 'within target'
       ? 'bg-primary/10 text-primary'
@@ -309,26 +364,52 @@ function Home() {
             <section>
                <SectionHeading icon={FlaskConical} label="Drug profile" detail="repeated bolus model" />
               <div className="space-y-3">
-                <label htmlFor="drug-name">
-                  <span className="input-label text-slate-400">Drug name</span>
-                  <input
-                    id="drug-name"
-                    data-testid="input-drug-name"
-                    className="input-field border-slate-600 bg-slate-900/40 text-slate-100 placeholder:text-slate-500"
-                    value={form.drugName}
-                    onChange={updateText}
-                    placeholder="e.g. Vancomycin"
-                  />
-                </label>
+                 <label htmlFor="drug-select">
+                   <span className="input-label inline-flex items-center gap-1.5 text-slate-400">
+                     ICU drug reference
+                     <TermHelp term="Drug name" />
+                   </span>
+                   <select
+                     id="drug-select"
+                     data-testid="select-drug"
+                     className="input-field border-slate-600 bg-slate-900/40 text-slate-100"
+                     value={form.drugId}
+                     onChange={selectDrug}
+                   >
+                     {ICU_DRUG_DATABASE.map((drug) => (
+                       <option value={drug.id} key={drug.id}>{drug.name}</option>
+                     ))}
+                   </select>
+                   <div className="mt-2 rounded-md border border-slate-700/80 bg-slate-900/25 px-2.5 py-2">
+                     <div className="flex items-center justify-between gap-2">
+                       <span className="text-[10px] font-semibold text-slate-300">{selectedDrug.className}</span>
+                       <span className="eyebrow text-[#79d9cd]">reference set</span>
+                     </div>
+                     <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{selectedDrug.renalHandling}</p>
+                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                       {selectedDrug.sources.map((source) => (
+                         <a
+                           key={source.url}
+                           href={source.url}
+                           target="_blank"
+                           rel="noreferrer"
+                           className="text-[9px] font-semibold text-[#79d9cd] underline decoration-[#79d9cd]/40 underline-offset-2 hover:text-white"
+                         >
+                           {source.label}
+                         </a>
+                       ))}
+                     </div>
+                   </div>
+                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                   <NumberField id="dose" label="Bolus dose" value={form.dose} unit="mg" min={0} onChange={updateNumeric('dose')} />
-                   <NumberField id="interval" label="Dosing interval" value={form.interval} unit="h" min={0.25} step={0.25} range={{ min: 4, max: 24, step: 1 }} onChange={updateNumeric('interval')} />
+                    <NumberField id="dose" label="Bolus dose" help="Bolus dose" value={form.dose} unit="mg" min={0} onChange={updateNumeric('dose')} />
+                    <NumberField id="interval" label="Dosing interval" help="Dosing interval" value={form.interval} unit="h" min={0.25} step={0.25} range={{ min: 4, max: 24, step: 1 }} onChange={updateNumeric('interval')} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                   <NumberField id="vd-per-kg" label="Vd per kg" value={form.vdLPerKg} unit="L/kg" min={0.01} max={10} step={0.01} range={{ min: 0.1, max: 2.5, step: 0.01 }} onChange={updateNumeric('vdLPerKg')} />
-                   <NumberField id="protein-binding" label="Protein binding" value={form.proteinBinding} unit="%" min={0} max={100} range={{ min: 0, max: 100, step: 1 }} onChange={updateNumeric('proteinBinding')} />
+                    <NumberField id="vd-per-kg" label="Vd per kg" help="Vd per kg" value={form.vdLPerKg} unit="L/kg" min={0.01} max={10} step={0.01} range={{ min: 0.1, max: 2.5, step: 0.01 }} onChange={updateNumeric('vdLPerKg')} />
+                    <NumberField id="protein-binding" label="Protein binding" help="Protein binding" value={form.proteinBinding} unit="%" min={0} max={100} range={{ min: 0, max: 100, step: 1 }} onChange={updateNumeric('proteinBinding')} />
                 </div>
-                 <NumberField id="molecular-weight" label="Molecular weight" value={form.molecularWeight} unit="Da" min={1} max={5000} onChange={updateNumeric('molecularWeight')} />
+                  <NumberField id="molecular-weight" label="Molecular weight" help="Molecular weight" value={form.molecularWeight} unit="Da" min={1} max={5000} onChange={updateNumeric('molecularWeight')} />
               </div>
             </section>
 
@@ -338,8 +419,8 @@ function Home() {
                <SectionHeading icon={UserRound} label="Patient parameters" detail="for dose-normalized volume and clearance" />
               <div className="space-y-3">
                  <div className="grid grid-cols-2 gap-2">
-                   <NumberField id="weight" label="Patient weight" value={form.weight} unit="kg" min={1} step={0.1} range={{ min: 40, max: 140, step: 1 }} onChange={updateNumeric('weight')} />
-                   <NumberField id="residual-clearance" label="Residual clearance" value={form.residualClearance} unit="mL/min" min={0} max={200} step={1} range={{ min: 0, max: 60, step: 1 }} onChange={updateNumeric('residualClearance')} />
+                    <NumberField id="weight" label="Patient weight" help="Patient weight" value={form.weight} unit="kg" min={1} step={0.1} range={{ min: 40, max: 140, step: 1 }} onChange={updateNumeric('weight')} />
+                    <NumberField id="residual-clearance" label="Residual clearance" help="Residual clearance" value={form.residualClearance} unit="mL/min" min={0} max={200} step={1} range={{ min: 0, max: 60, step: 1 }} onChange={updateNumeric('residualClearance')} />
                  </div>
               </div>
             </section>
@@ -350,7 +431,7 @@ function Home() {
               <SectionHeading icon={Droplets} label="CRRT prescription" detail="delivered settings assumed constant" />
               <div className="space-y-3">
                 <div>
-                  <div className="input-label text-slate-400">Modality</div>
+                   <div className="input-label inline-flex items-center gap-1.5 text-slate-400">Modality <TermHelp term="Modality" /></div>
                   <div className="segmented">
                      {(['CVVH', 'CVVHD'] as CrrtModality[]).map((modality) => (
                       <button
@@ -366,7 +447,7 @@ function Home() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                   <NumberField id="effluent" label="Effluent flow" value={form.effluent} unit="mL/kg/h" min={0} step={1} range={{ min: 0, max: 50, step: 1 }} onChange={updateNumeric('effluent')} />
+                   <NumberField id="effluent" label="Effluent flow" help="Effluent flow" value={form.effluent} unit="mL/kg/h" min={0} step={1} range={{ min: 0, max: 50, step: 1 }} onChange={updateNumeric('effluent')} />
                    <div className="rounded-md border border-slate-700 bg-slate-900/25 p-2.5">
                      <div className="input-label text-slate-400">Effective effluent</div>
                      <div className="mono text-sm font-medium text-slate-100">{formatNumber(calculated.summary.effluentLh, 2)} <span className="text-[10px] text-slate-400">L/h</span></div>
@@ -375,7 +456,7 @@ function Home() {
                 </div>
                 {form.modality === 'CVVH' ? (
                   <div className="rounded-md border border-slate-700 bg-slate-900/25 p-2.5">
-                    <div className="input-label mb-2 text-slate-400">Replacement location</div>
+                     <div className="input-label mb-2 inline-flex items-center gap-1.5 text-slate-400">Replacement location <TermHelp term="Pre-filter" /></div>
                     <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-900/55 p-1">
                        {(['pre', 'post'] as DilutionMode[]).map((site) => (
                         <button

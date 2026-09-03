@@ -168,6 +168,24 @@
 }
 .input-field:focus { border-color: hsl(var(--primary)); box-shadow: 0 0 0 3px hsl(var(--primary) / .12); background: hsl(var(--card)); }
 .input-label { display: block; margin-bottom: 6px; color: hsl(var(--muted-foreground)); font-size: 11px; font-weight: 600; letter-spacing: .01em; }
+.term-help { position: relative; display: inline-flex; align-items: center; color: hsl(var(--primary)); cursor: help; outline: none; }
+.term-help:focus-visible { border-radius: 999px; box-shadow: 0 0 0 3px hsl(var(--primary) / .22); }
+.term-tooltip {
+  position: absolute; z-index: 30; bottom: calc(100% + 9px); left: 50%; width: 220px;
+  transform: translateX(-50%) translateY(4px); pointer-events: none; opacity: 0;
+  border: 1px solid hsl(var(--border)); border-radius: 8px; background: hsl(var(--card));
+  box-shadow: 0 12px 28px hsl(215 33% 5% / .42); color: hsl(var(--foreground));
+  padding: 9px 10px; font-size: 10px; font-weight: 400; line-height: 1.45;
+  transition: opacity .16s ease, transform .16s ease;
+}
+.term-tooltip::after {
+  content: ''; position: absolute; top: 100%; left: 50%; width: 8px; height: 8px;
+  transform: translate(-50%, -4px) rotate(45deg); border-right: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border)); background: hsl(var(--card));
+}
+.term-tooltip strong { display: block; margin-bottom: 3px; color: hsl(var(--primary)); font-size: 10px; }
+.term-tooltip span { display: block; }
+.term-help:hover .term-tooltip, .term-help:focus-visible .term-tooltip { opacity: 1; transform: translateX(-50%) translateY(0); }
 .input-unit { position: relative; }
 .input-unit .input-field { padding-right: 38px; }
 .input-unit > span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: hsl(var(--muted-foreground)); font-family: var(--app-font-mono); font-size: 10px; pointer-events: none; }
@@ -203,4 +221,7 @@
   .dashboard-sidebar { border-right: 0; border-bottom: 1px solid hsl(var(--sidebar-border)); }
   .chart-wrap { height: 270px; }
   .mobile-scroll { overflow-x: auto; }
+  .term-tooltip { left: 0; transform: translateY(4px); }
+  .term-help:hover .term-tooltip, .term-help:focus-visible .term-tooltip { transform: translateY(0); }
+  .term-tooltip::after { left: 7px; transform: translateY(-4px) rotate(45deg); }
 }

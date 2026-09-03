@@ -91,6 +91,18 @@ const initialForm: FormState = {
   dilutionMode: 'pre' as DilutionMode,
 };
 
+const customDrugDefaults: Pick<
+  FormState,
+  'drugName' | 'dose' | 'vdLPerKg' | 'proteinBinding' | 'molecularWeight' | 'interval'
+> = {
+  drugName: 'Custom drug',
+  dose: 1000,
+  vdLPerKg: 0.5,
+  proteinBinding: 20,
+  molecularWeight: 300,
+  interval: 12,
+};
+
 const glossary: Record<string, string> = {
   'Bolus dose': 'The amount given at each dose time in this simplified model.',
   'Dosing interval': 'How often the bolus is repeated, measured in hours.',
@@ -243,6 +255,15 @@ function Home() {
   };
 
   const selectDrug = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (event.target.value === 'custom') {
+      setForm((current) => ({
+        ...current,
+        drugId: 'custom',
+        ...customDrugDefaults,
+      }));
+      return;
+    }
+
     const drug = findDrug(event.target.value);
     setForm((current) => ({
       ...current,
@@ -254,6 +275,10 @@ function Home() {
       molecularWeight: drug.molecularWeightDa,
       interval: drug.defaultIntervalHours,
     }));
+  };
+
+  const updateDrugName = (event: ChangeEvent<HTMLInputElement>) => {
+    setForm((current) => ({ ...current, drugName: event.target.value }));
   };
 
   const reset = () => {
@@ -312,7 +337,8 @@ function Home() {
     };
   }, [form]);
 
-  const selectedDrug: DrugReference = findDrug(form.drugId);
+  const selectedDrug: DrugReference | null =
+    form.drugId === 'custom' ? null : findDrug(form.drugId);
   const statusClass =
     calculated.status === 'within target'
       ? 'bg-primary/10 text-primary'
@@ -364,7 +390,7 @@ function Home() {
             <section>
                <SectionHeading icon={FlaskConical} label="Drug profile" detail="repeated bolus model" />
               <div className="space-y-3">
-                 <label htmlFor="drug-select">
+                 <div>
                    <span className="input-label inline-flex items-center gap-1.5 text-slate-400">
                      ICU drug reference
                      <TermHelp term="Drug name" />
@@ -379,28 +405,51 @@ function Home() {
                      {ICU_DRUG_DATABASE.map((drug) => (
                        <option value={drug.id} key={drug.id}>{drug.name}</option>
                      ))}
+                     <option value="custom">Custom drug profile</option>
                    </select>
-                   <div className="mt-2 rounded-md border border-slate-700/80 bg-slate-900/25 px-2.5 py-2">
-                     <div className="flex items-center justify-between gap-2">
-                       <span className="text-[10px] font-semibold text-slate-300">{selectedDrug.className}</span>
-                       <span className="eyebrow text-[#79d9cd]">reference set</span>
+                   {selectedDrug ? (
+                     <div className="mt-2 rounded-md border border-slate-700/80 bg-slate-900/25 px-2.5 py-2">
+                       <div className="flex items-center justify-between gap-2">
+                         <span className="text-[10px] font-semibold text-slate-300">{selectedDrug.className}</span>
+                         <span className="eyebrow text-[#79d9cd]">reference set</span>
+                       </div>
+                       <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{selectedDrug.renalHandling}</p>
+                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                         {selectedDrug.sources.map((source) => (
+                           <a
+                             key={source.url}
+                             href={source.url}
+                             target="_blank"
+                             rel="noreferrer"
+                             className="text-[9px] font-semibold text-[#79d9cd] underline decoration-[#79d9cd]/40 underline-offset-2 hover:text-white"
+                           >
+                             {source.label}
+                           </a>
+                         ))}
+                       </div>
                      </div>
-                     <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{selectedDrug.renalHandling}</p>
-                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                       {selectedDrug.sources.map((source) => (
-                         <a
-                           key={source.url}
-                           href={source.url}
-                           target="_blank"
-                           rel="noreferrer"
-                           className="text-[9px] font-semibold text-[#79d9cd] underline decoration-[#79d9cd]/40 underline-offset-2 hover:text-white"
-                         >
-                           {source.label}
-                         </a>
-                       ))}
+                   ) : (
+                     <div className="mt-2 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-2 text-[10px] leading-relaxed text-[#c88950]">
+                       User-entered profile. Add your own name and PK values below; no reference links are attached to this custom record.
                      </div>
-                   </div>
-                 </label>
+                   )}
+                   {form.drugId === 'custom' ? (
+                     <label htmlFor="custom-drug-name" className="mt-3 block">
+                       <span className="input-label inline-flex items-center gap-1.5 text-slate-400">
+                         Custom drug name
+                         <TermHelp term="Drug name" />
+                       </span>
+                       <input
+                         id="custom-drug-name"
+                         data-testid="input-custom-drug-name"
+                         className="input-field border-slate-600 bg-slate-900/40 text-slate-100"
+                         value={form.drugName}
+                         onChange={updateDrugName}
+                         placeholder="e.g. your ICU drug"
+                       />
+                     </label>
+                   ) : null}
+                 </div>
                 <div className="grid grid-cols-2 gap-2">
                     <NumberField id="dose" label="Bolus dose" help="Bolus dose" value={form.dose} unit="mg" min={0} onChange={updateNumeric('dose')} />
                     <NumberField id="interval" label="Dosing interval" help="Dosing interval" value={form.interval} unit="h" min={0.25} step={0.25} range={{ min: 4, max: 24, step: 1 }} onChange={updateNumeric('interval')} />

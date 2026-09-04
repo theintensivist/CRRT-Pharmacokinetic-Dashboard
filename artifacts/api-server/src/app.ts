@@ -11,5 +11,5 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
-
+app.get('/', (_req, res) => res.send('Welcome'));
 export default app;

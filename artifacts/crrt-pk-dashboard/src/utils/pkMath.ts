@@ -10,7 +10,11 @@ export interface PkInputs {
   intervalHours: number;
   weightKg: number;
   residualClearanceMlMin: number;
-  effluentMlKgH: number;
+  bloodFlowMlMin: number;
+  replacementFluidMlH: number;
+  dialysateMlH: number;
+  ultrafiltrationMlH: number;
+  filterDurationHours: number;
   modality: CrrtModality;
   dilutionMode: DilutionMode;
 }
@@ -24,7 +28,12 @@ export interface PkSummary {
   totalClearanceWithCrrtLh: number;
   halfLifeWithCrrtHours: number;
   halfLifeWithoutCrrtHours: number;
+  prescribedEffluentLh: number;
   effluentLh: number;
+  replacementFluidLh: number;
+  dialysateLh: number;
+  ultrafiltrationLh: number;
+  filterUptimeFraction: number;
   dilutionFactor: number;
   assumedMembranePassage: boolean;
 }
@@ -62,27 +71,39 @@ export function estimateFreeFraction(proteinBindingPercent: number): number {
 /**
  * Computes clearance terms in L/h.
  *
- * CVVH (convection): CLcrrt = Qeff × Sc × dilution factor
- * CVVHD (diffusion): CLcrrt = Qd × Sa
+ * CVVH (convection): CLcrrt = (Qreplacement + QUF) × Sc × dilution factor
+ * CVVHD (diffusion/convection): CLcrrt = (Qdialysate + QUF) × Sa
  *
- * With the limited prescription inputs requested by the brief, pre-filter
- * dilution is represented by a transparent 0.75 factor. A bedside model
- * with blood flow and replacement-fluid rates should replace this assumption
- * with Qb / (Qb + Qpre).
+ * Prescription rates are converted to delivered rates using daily filter
+ * uptime. For CVVH pre-filter replacement, the dilution factor is estimated
+ * from blood flow and pre-filter replacement rate:
+ * Qb / (Qb + Qpre).
  */
 export function calculateSummary(inputs: PkInputs): PkSummary {
   const vdL = Math.max(inputs.vdLPerKg * inputs.weightKg, 0.01);
   const freeFraction = estimateFreeFraction(inputs.proteinBindingPercent);
-  const effluentLh = Math.max(
-    (inputs.effluentMlKgH * inputs.weightKg) / ML_PER_LITER,
-    0,
-  );
+  const replacementFluidLh = Math.max(inputs.replacementFluidMlH / ML_PER_LITER, 0);
+  const dialysateLh = Math.max(inputs.dialysateMlH / ML_PER_LITER, 0);
+  const ultrafiltrationLh = Math.max(inputs.ultrafiltrationMlH / ML_PER_LITER, 0);
+  const filterUptimeFraction = clamp(inputs.filterDurationHours / 24, 0, 1);
+  const prescribedEffluentLh =
+    inputs.modality === 'CVVH'
+      ? replacementFluidLh + ultrafiltrationLh
+      : dialysateLh + ultrafiltrationLh;
+  const effluentLh = prescribedEffluentLh * filterUptimeFraction;
   const endogenousClearanceLh = Math.max(
     (inputs.residualClearanceMlMin * MINUTES_PER_HOUR) / ML_PER_LITER,
     0,
   );
+  const bloodFlowMlMin = Math.max(inputs.bloodFlowMlMin, 0);
+  const preFilterReplacementMlMin =
+    inputs.dilutionMode === 'pre' ? replacementFluidLh * ML_PER_LITER / MINUTES_PER_HOUR : 0;
   const dilutionFactor =
-    inputs.modality === 'CVVH' && inputs.dilutionMode === 'pre' ? 0.75 : 1;
+    inputs.modality === 'CVVH' && inputs.dilutionMode === 'pre'
+      ? bloodFlowMlMin + preFilterReplacementMlMin > 0
+        ? bloodFlowMlMin / (bloodFlowMlMin + preFilterReplacementMlMin)
+        : 0
+      : 1;
   const crrtClearanceLh =
     inputs.modality === 'CVVH'
       ? effluentLh * freeFraction * dilutionFactor
@@ -105,7 +126,12 @@ export function calculateSummary(inputs: PkInputs): PkSummary {
       endogenousClearanceLh > 0
         ? (Math.log(2) * vdL) / endogenousClearanceLh
         : Number.POSITIVE_INFINITY,
+    prescribedEffluentLh,
     effluentLh,
+    replacementFluidLh,
+    dialysateLh,
+    ultrafiltrationLh,
+    filterUptimeFraction,
     dilutionFactor,
     assumedMembranePassage: inputs.molecularWeightDa > 1000,
   };

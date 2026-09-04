@@ -58,7 +58,11 @@ type NumericField =
   | 'interval'
   | 'weight'
   | 'residualClearance'
-  | 'effluent'
+  | 'bloodFlow'
+  | 'replacementFluid'
+  | 'dialysate'
+  | 'ultrafiltration'
+  | 'filterDuration'
   | 'customTargetLow'
   | 'customTargetHigh'
   ;
@@ -74,7 +78,11 @@ type FormState = {
   weight: number;
   residualClearance: number;
   modality: CrrtModality;
-  effluent: number;
+  bloodFlow: number;
+  replacementFluid: number;
+  dialysate: number;
+  ultrafiltration: number;
+  filterDuration: number;
   dilutionMode: DilutionMode;
   customClassName: string;
   customCommonUse: string;
@@ -117,7 +125,11 @@ const initialForm: FormState = {
   weight: 74,
   residualClearance: 14,
   modality: 'CVVH' as CrrtModality,
-  effluent: 25,
+  bloodFlow: 150,
+  replacementFluid: 1800,
+  dialysate: 1800,
+  ultrafiltration: 100,
+  filterDuration: 24,
   dilutionMode: 'pre' as DilutionMode,
   customClassName: '',
   customCommonUse: '',
@@ -217,9 +229,13 @@ const glossary: Record<string, string> = {
   'Vd per kg': 'Volume of distribution per kilogram: a rough measure of how widely the drug spreads beyond the bloodstream.',
   'Protein binding': 'The percentage attached to proteins. The unbound portion is the part assumed available to cross the CRRT membrane.',
   'Molecular weight': 'The size of one drug molecule. Higher values make the membrane-passage approximation less certain.',
-  'Patient weight': 'Body weight used to convert the prescribed effluent rate into an hourly flow.',
+  'Patient weight': 'Body weight used to convert dose-normalized pharmacokinetic volume into liters.',
   'Residual clearance': 'Clearance that remains from the patient’s own kidneys, entered directly in mL/min.',
-  'Effluent flow': 'The CRRT fluid removal rate used as the effective convective or diffusive flow.',
+  'Blood flow': 'Blood flow through the circuit, entered in mL/min. It is used with pre-filter replacement to estimate dilution.',
+  'Replacement fluid': 'CVVH substitution fluid rate. It contributes to effluent and, when pre-filter, dilutes blood entering the membrane.',
+  'Dialysate': 'CVVHD dialysate rate. It is the modeled diffusive component of effluent.',
+  'Net ultrafiltration': 'Net fluid removal rate. It contributes to effluent in both modeled modalities.',
+  'Filter uptime': 'Hours per 24-hour day that the filter is assumed to deliver the prescription; this scales prescribed to delivered effluent.',
   Modality: 'The CRRT technique being modeled: CVVH removes solute mainly by convection, while CVVHD uses diffusion.',
   'CVVH': 'Continuous venovenous hemofiltration: clearance is modeled mainly by convection across the filter.',
   'CVVHD': 'Continuous venovenous hemodialysis: clearance is modeled mainly by diffusion into dialysate.',
@@ -531,7 +547,11 @@ function Home() {
       intervalHours: Math.max(form.interval, 0.25),
       weightKg: Math.max(form.weight, 0.1),
       residualClearanceMlMin: Math.max(form.residualClearance, 0),
-      effluentMlKgH: Math.max(form.effluent, 0),
+      bloodFlowMlMin: Math.max(form.bloodFlow, 0),
+      replacementFluidMlH: Math.max(form.replacementFluid, 0),
+      dialysateMlH: Math.max(form.dialysate, 0),
+      ultrafiltrationMlH: Math.max(form.ultrafiltration, 0),
+      filterDurationHours: Math.max(form.filterDuration, 0),
       modality: form.modality,
       dilutionMode: form.dilutionMode,
     };
@@ -575,7 +595,8 @@ function Home() {
     if (form.vdLPerKg <= 0) messages.push('Vd per kg must be greater than 0.');
     if (form.weight <= 0) messages.push('Patient weight must be greater than 0 kg.');
     if (form.proteinBinding < 0 || form.proteinBinding > 100) messages.push('Protein binding must be between 0% and 100%.');
-    if (form.effluent < 0 || form.residualClearance < 0) messages.push('Clearance inputs cannot be negative.');
+     if (form.residualClearance < 0 || form.bloodFlow < 0 || form.replacementFluid < 0 || form.dialysate < 0 || form.ultrafiltration < 0) messages.push('Clearance inputs cannot be negative.');
+     if (form.filterDuration < 0 || form.filterDuration > 24) messages.push('Filter uptime must be between 0 and 24 hours per day.');
     if (isCustomDrug && !form.drugName.trim()) messages.push('Custom drug name is required.');
     if (isCustomDrug && form.customTargetHigh <= form.customTargetLow) messages.push('Custom target high must be greater than target low.');
     return messages;
@@ -585,7 +606,9 @@ function Home() {
     return [0.5, 1, 1.5].map((multiplier) => {
       const inputs: PkInputs = {
         ...calculated.inputs,
-        effluentMlKgH: calculated.inputs.effluentMlKgH * multiplier,
+        replacementFluidMlH: calculated.inputs.replacementFluidMlH * multiplier,
+        dialysateMlH: calculated.inputs.dialysateMlH * multiplier,
+        ultrafiltrationMlH: calculated.inputs.ultrafiltrationMlH * multiplier,
       };
       const summary = calculateSummary(inputs);
       const profile = generateConcentrationProfile(inputs, summary);
@@ -811,66 +834,88 @@ function Home() {
 
             <div className="h-px bg-slate-700/60" />
 
-            <section>
-              <SectionHeading icon={Droplets} label="CRRT prescription" detail="delivered settings assumed constant" />
-              <div className="space-y-3">
-                <div>
+             <section>
+               <SectionHeading icon={Droplets} label="CRRT prescription" detail="modality-specific delivered settings" />
+               <div className="space-y-3">
+                 <div>
                    <div className="input-label inline-flex items-center gap-1.5 text-slate-400">Modality <TermHelp term="Modality" /></div>
-                  <div className="segmented">
+                   <div className="segmented">
                      {(['CVVH', 'CVVHD'] as CrrtModality[]).map((modality) => (
-                      <button
-                        type="button"
-                        key={modality}
-                        data-testid={`button-modality-${modality.toLowerCase()}`}
-                        aria-pressed={form.modality === modality}
-                        onClick={() => setForm((current) => ({ ...current, modality }))}
-                      >
-                        {modality}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                   <NumberField id="effluent" label="Effluent flow" help="Effluent flow" value={form.effluent} unit="mL/kg/h" min={0} step={1} range={{ min: 0, max: 50, step: 1 }} onChange={updateNumeric('effluent')} />
-                   <div className="rounded-md border border-slate-700 bg-slate-900/25 p-2.5">
-                     <div className="input-label text-slate-400">Effective effluent</div>
-                     <div className="mono text-sm font-medium text-slate-100">{formatNumber(calculated.summary.effluentLh, 2)} <span className="text-[10px] text-slate-400">L/h</span></div>
-                     <div className="mt-1 text-[10px] text-slate-500">{form.weight} kg × {form.effluent} mL/kg/h</div>
+                       <button
+                         type="button"
+                         key={modality}
+                         data-testid={`button-modality-${modality.toLowerCase()}`}
+                         aria-pressed={form.modality === modality}
+                         onClick={() => setForm((current) => ({ ...current, modality }))}
+                       >
+                         {modality}
+                       </button>
+                     ))}
                    </div>
-                </div>
-                {form.modality === 'CVVH' ? (
-                  <div className="rounded-md border border-slate-700 bg-slate-900/25 p-2.5">
-                     <div className="input-label mb-2 inline-flex items-center gap-1.5 text-slate-400">Replacement location <TermHelp term="Pre-filter" /></div>
-                    <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-900/55 p-1">
-                       {(['pre', 'post'] as DilutionMode[]).map((site) => (
-                        <button
-                          type="button"
-                          key={site}
-                          data-testid={`button-dilution-${site}`}
-                           aria-pressed={form.dilutionMode === site}
-                           className={`rounded px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                             form.dilutionMode === site ? 'bg-slate-600 text-[#efbd83]' : 'text-slate-400 hover:text-slate-200'
-                          }`}
-                           onClick={() => setForm((current) => ({ ...current, dilutionMode: site }))}
-                        >
-                           {site === 'pre' ? 'Pre-filter' : 'Post-filter'}
-                        </button>
-                      ))}
-                    </div>
-                     <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
-                       {form.dilutionMode === 'pre'
-                         ? 'A 0.75 hemodilution factor is applied to convective clearance.'
-                         : 'Post-filter replacement does not reduce convective clearance.'}
-                     </p>
-                  </div>
-                ) : (
-                  <div className="flex gap-2 rounded-md border border-slate-700/80 bg-slate-900/25 p-2.5 text-[10px] leading-relaxed text-slate-400">
-                    <Info size={14} className="mt-0.5 shrink-0 text-[#d8a0c8]" />
-                    <span>Dilution is not applied to the CVVHD dialysate clearance estimate.</span>
-                  </div>
-                )}
-              </div>
-            </section>
+                 </div>
+                 <div className="grid grid-cols-2 gap-2">
+                   <NumberField id="blood-flow" label="Blood flow" help="Blood flow" value={form.bloodFlow} unit="mL/min" min={0} step={10} range={{ min: 0, max: 300, step: 10 }} onChange={updateNumeric('bloodFlow')} />
+                   <NumberField id="filter-duration" label="Filter uptime" help="Filter uptime" value={form.filterDuration} unit="h/day" min={0} max={24} step={1} range={{ min: 0, max: 24, step: 1 }} onChange={updateNumeric('filterDuration')} />
+                 </div>
+                 {form.modality === 'CVVH' ? (
+                   <>
+                     <div className="grid grid-cols-2 gap-2">
+                       <NumberField id="replacement-fluid" label="Replacement fluid" help="Replacement fluid" value={form.replacementFluid} unit="mL/h" min={0} step={100} range={{ min: 0, max: 5000, step: 100 }} onChange={updateNumeric('replacementFluid')} />
+                       <NumberField id="ultrafiltration" label="Net ultrafiltration" help="Net ultrafiltration" value={form.ultrafiltration} unit="mL/h" min={0} step={50} range={{ min: 0, max: 2000, step: 50 }} onChange={updateNumeric('ultrafiltration')} />
+                     </div>
+                     <div className="rounded-md border border-slate-700 bg-slate-900/25 p-2.5">
+                       <div className="input-label mb-2 inline-flex items-center gap-1.5 text-slate-400">Replacement location <TermHelp term="Pre-filter" /></div>
+                       <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-900/55 p-1">
+                         {(['pre', 'post'] as DilutionMode[]).map((site) => (
+                           <button
+                             type="button"
+                             key={site}
+                             data-testid={`button-dilution-${site}`}
+                             aria-pressed={form.dilutionMode === site}
+                             className={`rounded px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                               form.dilutionMode === site ? 'bg-slate-600 text-[#efbd83]' : 'text-slate-400 hover:text-slate-200'
+                             }`}
+                             onClick={() => setForm((current) => ({ ...current, dilutionMode: site }))}
+                           >
+                             {site === 'pre' ? 'Pre-filter' : 'Post-filter'}
+                           </button>
+                         ))}
+                       </div>
+                       <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
+                         {form.dilutionMode === 'pre'
+                           ? `Qb / (Qb + Qpre) = ${formatNumber(calculated.dilutionFactor * 100, 0)}% blood concentration retained before the membrane.`
+                           : 'Post-filter replacement does not dilute blood crossing the membrane.'}
+                       </p>
+                     </div>
+                   </>
+                 ) : (
+                   <>
+                     <div className="grid grid-cols-2 gap-2">
+                       <NumberField id="dialysate" label="Dialysate" help="Dialysate" value={form.dialysate} unit="mL/h" min={0} step={100} range={{ min: 0, max: 5000, step: 100 }} onChange={updateNumeric('dialysate')} />
+                       <NumberField id="ultrafiltration" label="Net ultrafiltration" help="Net ultrafiltration" value={form.ultrafiltration} unit="mL/h" min={0} step={50} range={{ min: 0, max: 2000, step: 50 }} onChange={updateNumeric('ultrafiltration')} />
+                     </div>
+                     <div className="flex gap-2 rounded-md border border-slate-700/80 bg-slate-900/25 p-2.5 text-[10px] leading-relaxed text-slate-400">
+                       <Info size={14} className="mt-0.5 shrink-0 text-[#d8a0c8]" />
+                       <span>Dialysate drives the modeled diffusive clearance; net ultrafiltration contributes to the delivered effluent estimate. Replacement-fluid dilution is not applied in CVVHD.</span>
+                     </div>
+                   </>
+                 )}
+                 <div className="rounded-md border border-primary/25 bg-primary/[.06] p-2.5">
+                   <div className="grid grid-cols-2 gap-3">
+                     <div>
+                       <div className="input-label text-slate-400">Prescribed effluent</div>
+                       <div className="mono text-sm font-medium text-slate-100">{formatNumber(calculated.summary.prescribedEffluentLh, 2)} <span className="text-[10px] text-slate-400">L/h</span></div>
+                       <div className="mt-1 text-[10px] text-slate-500">{form.modality === 'CVVH' ? 'replacement + net UF' : 'dialysate + net UF'}</div>
+                     </div>
+                     <div>
+                       <div className="input-label text-slate-400">Delivered effluent</div>
+                       <div className="mono text-sm font-medium text-primary">{formatNumber(calculated.summary.effluentLh, 2)} <span className="text-[10px] text-slate-400">L/h</span></div>
+                       <div className="mt-1 text-[10px] text-slate-500">{formatNumber(calculated.summary.filterUptimeFraction * 100, 0)}% filter uptime</div>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </section>
           </div>
         </aside>
 
@@ -975,7 +1020,7 @@ function Home() {
                 <div className="eyebrow">Stress test</div>
                 <h2 className="mt-1 text-[14px] font-bold tracking-tight text-foreground">Effluent sensitivity</h2>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                  Modeled 24-hour concentration if delivered effluent is 50%, 100%, or 150% of the entered prescription.
+                  Modeled 24-hour concentration if the fluid-rate components are 50%, 100%, or 150% of the entered prescription.
                 </p>
               </div>
               <SlidersHorizontal size={16} className="text-primary" />
@@ -1040,8 +1085,10 @@ function Home() {
                 <div className="mt-4 space-y-3">
                   <div className="assumption-row"><ShieldCheck size={14} /><span>First-order elimination assumes stable prescription, drug distribution, and serum creatinine across 72 hours.</span></div>
                    <div className="assumption-row"><Info size={14} /><span>Endogenous clearance is entered directly in mL/min; no renal-function equation is inferred from demographics.</span></div>
-                   <div className="assumption-row"><Droplets size={14} /><span>{form.modality} clearance uses unbound fraction × effective effluent. CVVH pre-filter dilution applies a 0.75 factor; post-filter does not.</span></div>
-                   <div className="assumption-row"><FlaskConical size={14} /><span>Sieving and saturation are approximated as 1 − protein binding; molecular weight is shown to flag the membrane-passage assumption.</span></div>
+                   <div className="assumption-row"><Droplets size={14} /><span>{form.modality} clearance uses the unbound fraction × delivered effluent: {form.modality === 'CVVH' ? 'replacement fluid + net ultrafiltration' : 'dialysate + net ultrafiltration'}. Filter uptime scales prescribed flow to delivered flow.</span></div>
+                   <div className="assumption-row"><Activity size={14} /><span>For CVVH pre-filter replacement, dilution is calculated as Qb / (Qb + Qpre) from the entered blood flow and replacement-fluid rate; post-filter replacement has no dilution adjustment.</span></div>
+                   <div className="assumption-row"><FlaskConical size={14} /><span>Sieving and saturation are approximated as 1 − protein binding; membrane type, hematocrit, access recirculation, adsorption, and changing filter performance remain uncertain.</span></div>
+                   <div className="assumption-row"><Info size={14} /><span>Filter uptime is a daily average. The model does not represent the timing of interruptions, changing patient physiology, or concentration changes during filter downtime.</span></div>
                    {calculated.summary.assumedMembranePassage ? (
                      <div className="rounded-md border border-accent/35 bg-accent/10 px-3 py-2.5 text-[10px] font-medium leading-relaxed text-[#c88950]">
                        Molecular weight is above 1,000 Da. The free-fraction estimate should be treated as especially uncertain for membrane passage.

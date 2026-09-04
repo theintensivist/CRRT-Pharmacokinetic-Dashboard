@@ -1,15 +1,20 @@
-import { useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import {
   Activity,
+  AlertTriangle,
   ChevronDown,
   CircleHelp,
+  Download,
   Droplets,
   FlaskConical,
   Info,
   RotateCcw,
+  Save,
   ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UserRound,
+  Upload,
 } from 'lucide-react';
 import {
   CartesianGrid,
@@ -54,6 +59,8 @@ type NumericField =
   | 'weight'
   | 'residualClearance'
   | 'effluent'
+  | 'customTargetLow'
+  | 'customTargetHigh'
   ;
 
 type FormState = {
@@ -69,6 +76,28 @@ type FormState = {
   modality: CrrtModality;
   effluent: number;
   dilutionMode: DilutionMode;
+  customClassName: string;
+  customCommonUse: string;
+  customRenalHandling: string;
+  customTargetLow: number;
+  customTargetHigh: number;
+  customTargetType: string;
+};
+
+type CustomDrugProfile = {
+  id: string;
+  name: string;
+  className: string;
+  commonUse: string;
+  renalHandling: string;
+  dose: number;
+  vdLPerKg: number;
+  proteinBinding: number;
+  molecularWeight: number;
+  interval: number;
+  targetLow: number;
+  targetHigh: number;
+  targetType: string;
 };
 
 type TooltipPayload = {
@@ -90,19 +119,97 @@ const initialForm: FormState = {
   modality: 'CVVH' as CrrtModality,
   effluent: 25,
   dilutionMode: 'pre' as DilutionMode,
+  customClassName: '',
+  customCommonUse: '',
+  customRenalHandling: '',
+  customTargetLow: 8,
+  customTargetHigh: 16,
+  customTargetType: 'user-entered reference window',
 };
 
 const customDrugDefaults: Pick<
   FormState,
-  'drugName' | 'dose' | 'vdLPerKg' | 'proteinBinding' | 'molecularWeight' | 'interval'
+  | 'drugName'
+  | 'dose'
+  | 'vdLPerKg'
+  | 'proteinBinding'
+  | 'molecularWeight'
+  | 'interval'
+  | 'customClassName'
+  | 'customCommonUse'
+  | 'customRenalHandling'
+  | 'customTargetLow'
+  | 'customTargetHigh'
+  | 'customTargetType'
 > = {
   drugName: 'Custom drug',
+  customClassName: 'Custom profile',
+  customCommonUse: '',
+  customRenalHandling: '',
   dose: 1000,
   vdLPerKg: 0.5,
   proteinBinding: 20,
   molecularWeight: 300,
   interval: 12,
+  customTargetLow: 8,
+  customTargetHigh: 16,
+  customTargetType: 'user-entered reference window',
 };
+
+const CUSTOM_PROFILE_STORAGE_KEY = 'crrt-pk-custom-profiles-v1';
+
+function isCustomDrugProfile(profile: unknown): profile is CustomDrugProfile {
+  if (!profile || typeof profile !== 'object') return false;
+  const candidate = profile as CustomDrugProfile;
+  return Boolean(
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.className === 'string' &&
+    typeof candidate.commonUse === 'string' &&
+    typeof candidate.renalHandling === 'string' &&
+    typeof candidate.targetType === 'string' &&
+    Number.isFinite(candidate.dose) &&
+    Number.isFinite(candidate.vdLPerKg) &&
+    Number.isFinite(candidate.proteinBinding) &&
+    Number.isFinite(candidate.molecularWeight) &&
+    Number.isFinite(candidate.interval) &&
+    Number.isFinite(candidate.targetLow) &&
+    Number.isFinite(candidate.targetHigh),
+  );
+}
+
+function readCustomProfiles(): CustomDrugProfile[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(CUSTOM_PROFILE_STORAGE_KEY) ?? '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isCustomDrugProfile);
+  } catch {
+    return [];
+  }
+}
+
+function isCustomDrugId(id: string) {
+  return id === 'custom' || id.startsWith('custom:');
+}
+
+function customProfileToForm(profile: CustomDrugProfile): Partial<FormState> {
+  return {
+    drugId: `custom:${profile.id}`,
+    drugName: profile.name,
+    dose: profile.dose,
+    vdLPerKg: profile.vdLPerKg,
+    proteinBinding: profile.proteinBinding,
+    molecularWeight: profile.molecularWeight,
+    interval: profile.interval,
+    customClassName: profile.className,
+    customCommonUse: profile.commonUse,
+    customRenalHandling: profile.renalHandling,
+    customTargetLow: profile.targetLow,
+    customTargetHigh: profile.targetHigh,
+    customTargetType: profile.targetType,
+  };
+}
 
 const glossary: Record<string, string> = {
   'Bolus dose': 'The amount given at each dose time in this simplified model.',
@@ -248,7 +355,14 @@ function SectionHeading({
 
 function Home() {
   const [form, setForm] = useState<FormState>(initialForm);
+  const [savedProfiles, setSavedProfiles] = useState<CustomDrugProfile[]>(readCustomProfiles);
+  const [profileMessage, setProfileMessage] = useState('');
   const [showAssumptions, setShowAssumptions] = useState(true);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    window.localStorage.setItem(CUSTOM_PROFILE_STORAGE_KEY, JSON.stringify(savedProfiles));
+  }, [savedProfiles]);
 
   const updateNumeric = (key: NumericField) => (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number(event.target.value);
@@ -262,6 +376,16 @@ function Home() {
         drugId: 'custom',
         ...customDrugDefaults,
       }));
+      setProfileMessage('');
+      return;
+    }
+
+    if (event.target.value.startsWith('custom:')) {
+      const profile = savedProfiles.find((candidate) => `custom:${candidate.id}` === event.target.value);
+      if (profile) {
+        setForm((current) => ({ ...current, ...customProfileToForm(profile) }));
+        setProfileMessage(`Loaded ${profile.name}.`);
+      }
       return;
     }
 
@@ -276,19 +400,127 @@ function Home() {
       molecularWeight: drug.molecularWeightDa,
       interval: drug.defaultIntervalHours,
     }));
+    setProfileMessage('');
   };
 
   const updateDrugName = (event: ChangeEvent<HTMLInputElement>) => {
     setForm((current) => ({ ...current, drugName: event.target.value }));
   };
 
+  const updateCustomText = (
+    key: 'customClassName' | 'customCommonUse' | 'customRenalHandling' | 'customTargetType',
+  ) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setForm((current) => ({ ...current, [key]: event.target.value }));
+  };
+
+  const saveCustomProfile = () => {
+    const name = form.drugName.trim();
+    const targetLow = Math.max(form.customTargetLow, 0);
+    const targetHigh = Math.max(form.customTargetHigh, 0);
+    if (!name) {
+      setProfileMessage('Enter a custom drug name before saving.');
+      return;
+    }
+    if (targetHigh <= targetLow) {
+      setProfileMessage('Target high must be greater than target low.');
+      return;
+    }
+    const existingId = form.drugId.startsWith('custom:') ? form.drugId.slice('custom:'.length) : '';
+    const profile: CustomDrugProfile = {
+      id: existingId || `profile-${Date.now()}`,
+      name,
+      className: form.customClassName.trim() || 'Custom profile',
+      commonUse: form.customCommonUse.trim(),
+      renalHandling: form.customRenalHandling.trim(),
+      dose: Math.max(form.dose, 0),
+      vdLPerKg: Math.max(form.vdLPerKg, 0.01),
+      proteinBinding: Math.min(Math.max(form.proteinBinding, 0), 100),
+      molecularWeight: Math.max(form.molecularWeight, 1),
+      interval: Math.max(form.interval, 0.25),
+      targetLow,
+      targetHigh,
+      targetType: form.customTargetType.trim() || 'user-entered reference window',
+    };
+    setSavedProfiles((current) => {
+      const exists = current.some((candidate) => candidate.id === profile.id);
+      return exists
+        ? current.map((candidate) => candidate.id === profile.id ? profile : candidate)
+        : [profile, ...current];
+    });
+    setForm((current) => ({ ...current, ...customProfileToForm(profile) }));
+    setProfileMessage(`${profile.name} saved on this device.`);
+  };
+
+  const deleteCurrentCustomProfile = () => {
+    const profileId = form.drugId.startsWith('custom:') ? form.drugId.slice('custom:'.length) : '';
+    if (!profileId) {
+      setForm((current) => ({ ...current, drugId: 'custom', ...customDrugDefaults }));
+      setProfileMessage('Custom draft cleared.');
+      return;
+    }
+    const deleted = savedProfiles.find((profile) => profile.id === profileId);
+    setSavedProfiles((current) => current.filter((profile) => profile.id !== profileId));
+    setForm((current) => ({ ...current, drugId: 'custom', ...customDrugDefaults }));
+    setProfileMessage(`${deleted?.name ?? 'Custom profile'} deleted.`);
+  };
+
+  const exportCustomProfiles = () => {
+    if (!savedProfiles.length) {
+      setProfileMessage('Save a custom profile before exporting.');
+      return;
+    }
+    const blob = new Blob(
+      [JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), profiles: savedProfiles }, null, 2)],
+      { type: 'application/json' },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'crrt-pk-custom-profiles.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    setProfileMessage(`${savedProfiles.length} custom profile${savedProfiles.length === 1 ? '' : 's'} exported.`);
+  };
+
+  const importCustomProfiles = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      const candidates = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === 'object' && Array.isArray((parsed as { profiles?: unknown }).profiles)
+          ? (parsed as { profiles: unknown[] }).profiles
+          : [];
+      const imported = candidates.filter(isCustomDrugProfile);
+      if (!imported.length) {
+        setProfileMessage('No valid custom profiles found in that file.');
+        return;
+      }
+      setSavedProfiles((current) => {
+        const next = [...current];
+        imported.forEach((profile) => {
+          const index = next.findIndex((candidate) => candidate.id === profile.id);
+          if (index >= 0) next[index] = profile;
+          else next.unshift(profile);
+        });
+        return next;
+      });
+      setProfileMessage(`${imported.length} custom profile${imported.length === 1 ? '' : 's'} imported.`);
+    } catch {
+      setProfileMessage('That file could not be read as a custom profile export.');
+    }
+  };
+
   const reset = () => {
     setForm(initialForm);
     setShowAssumptions(true);
+    setProfileMessage('');
   };
 
-  const selectedDrug: DrugReference | null =
-    form.drugId === 'custom' ? null : findDrug(form.drugId);
+  const isCustomDrug = isCustomDrugId(form.drugId);
+  const selectedDrug: DrugReference | null = isCustomDrug ? null : findDrug(form.drugId);
 
   const calculated = useMemo(() => {
     const inputs: PkInputs = {
@@ -310,8 +542,8 @@ function Home() {
       withCrrt: point.withCrrt,
       withoutCrrt: point.withoutCrrt,
     }));
-    const targetLow = selectedDrug?.targetRange.low ?? 8;
-    const targetHigh = selectedDrug?.targetRange.high ?? 16;
+    const targetLow = selectedDrug?.targetRange.low ?? Math.max(form.customTargetLow, 0);
+    const targetHigh = selectedDrug?.targetRange.high ?? Math.max(form.customTargetHigh, targetLow + 0.01);
     const at24 = profile[24]?.withCrrt ?? 0;
     const status = getTargetStatus(at24, targetLow, targetHigh);
 
@@ -335,6 +567,38 @@ function Home() {
       yMax: Math.max(curve[0]?.withCrrt ?? 0, targetHigh * 1.35, 1),
     };
   }, [form, selectedDrug]);
+
+  const validationMessages = useMemo(() => {
+    const messages: string[] = [];
+    if (form.dose <= 0) messages.push('Bolus dose must be greater than 0 mg.');
+    if (form.interval <= 0) messages.push('Dosing interval must be greater than 0 hours.');
+    if (form.vdLPerKg <= 0) messages.push('Vd per kg must be greater than 0.');
+    if (form.weight <= 0) messages.push('Patient weight must be greater than 0 kg.');
+    if (form.proteinBinding < 0 || form.proteinBinding > 100) messages.push('Protein binding must be between 0% and 100%.');
+    if (form.effluent < 0 || form.residualClearance < 0) messages.push('Clearance inputs cannot be negative.');
+    if (isCustomDrug && !form.drugName.trim()) messages.push('Custom drug name is required.');
+    if (isCustomDrug && form.customTargetHigh <= form.customTargetLow) messages.push('Custom target high must be greater than target low.');
+    return messages;
+  }, [form, isCustomDrug]);
+
+  const sensitivity = useMemo(() => {
+    return [0.5, 1, 1.5].map((multiplier) => {
+      const inputs: PkInputs = {
+        ...calculated.inputs,
+        effluentMlKgH: calculated.inputs.effluentMlKgH * multiplier,
+      };
+      const summary = calculateSummary(inputs);
+      const profile = generateConcentrationProfile(inputs, summary);
+      const concentration = profile[24]?.withCrrt ?? 0;
+      return {
+        multiplier,
+        label: `${Math.round(multiplier * 100)}%`,
+        concentration,
+        status: getTargetStatus(concentration, calculated.targetLow, calculated.targetHigh),
+      };
+    });
+  }, [calculated]);
+
   const statusClass =
     calculated.status === 'within target'
       ? 'bg-primary/10 text-primary'
@@ -406,6 +670,13 @@ function Home() {
                      {ICU_DRUG_DATABASE.map((drug) => (
                        <option value={drug.id} key={drug.id}>{drug.name}</option>
                      ))}
+                     {savedProfiles.length ? (
+                       <optgroup label="Saved custom profiles">
+                         {savedProfiles.map((profile) => (
+                           <option value={`custom:${profile.id}`} key={profile.id}>{profile.name}</option>
+                         ))}
+                       </optgroup>
+                     ) : null}
                      <option value="custom">Custom drug profile</option>
                    </select>
                    {selectedDrug ? (
@@ -452,21 +723,66 @@ function Home() {
                        User-entered profile. Add your own name and PK values below; no reference links are attached to this custom record.
                      </div>
                    )}
-                   {form.drugId === 'custom' ? (
-                     <label htmlFor="custom-drug-name" className="mt-3 block">
-                       <span className="input-label inline-flex items-center gap-1.5 text-slate-400">
-                         Custom drug name
-                         <TermHelp term="Drug name" />
-                       </span>
-                       <input
-                         id="custom-drug-name"
-                         data-testid="input-custom-drug-name"
-                         className="input-field border-slate-600 bg-slate-900/40 text-slate-100"
-                         value={form.drugName}
-                         onChange={updateDrugName}
-                         placeholder="e.g. your ICU drug"
-                       />
-                     </label>
+                    {isCustomDrug ? (
+                      <div className="mt-3 space-y-3">
+                        <label htmlFor="custom-drug-name" className="block">
+                          <span className="input-label inline-flex items-center gap-1.5 text-slate-400">
+                            Custom drug name
+                            <TermHelp term="Drug name" />
+                          </span>
+                          <input
+                            id="custom-drug-name"
+                            data-testid="input-custom-drug-name"
+                            className="input-field border-slate-600 bg-slate-900/40 text-slate-100"
+                            value={form.drugName}
+                            onChange={updateDrugName}
+                            placeholder="e.g. your ICU drug"
+                          />
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label htmlFor="custom-class">
+                            <span className="input-label text-slate-400">Drug class</span>
+                            <input id="custom-class" className="input-field border-slate-600 bg-slate-900/40 text-slate-100" value={form.customClassName} onChange={updateCustomText('customClassName')} placeholder="e.g. antibiotic" />
+                          </label>
+                          <label htmlFor="custom-use">
+                            <span className="input-label text-slate-400">Common use</span>
+                            <input id="custom-use" className="input-field border-slate-600 bg-slate-900/40 text-slate-100" value={form.customCommonUse} onChange={updateCustomText('customCommonUse')} placeholder="e.g. ICU infection" />
+                          </label>
+                        </div>
+                        <label htmlFor="custom-renal-handling">
+                          <span className="input-label text-slate-400">Renal / clinical note</span>
+                          <textarea id="custom-renal-handling" className="input-field min-h-16 resize-y border-slate-600 bg-slate-900/40 text-slate-100" value={form.customRenalHandling} onChange={updateCustomText('customRenalHandling')} placeholder="Describe renal handling, uncertainty, or local guidance" />
+                        </label>
+                        <div>
+                          <span className="input-label text-slate-400">Custom target window</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <NumberField id="custom-target-low" label="Target low" value={form.customTargetLow} unit="mg/L" min={0} step={0.1} onChange={updateNumeric('customTargetLow')} />
+                            <NumberField id="custom-target-high" label="Target high" value={form.customTargetHigh} unit="mg/L" min={0} step={0.1} onChange={updateNumeric('customTargetHigh')} />
+                          </div>
+                        </div>
+                        <label htmlFor="custom-target-type">
+                          <span className="input-label text-slate-400">Target type / context</span>
+                          <input id="custom-target-type" className="input-field border-slate-600 bg-slate-900/40 text-slate-100" value={form.customTargetType} onChange={updateCustomText('customTargetType')} placeholder="e.g. trough reference" />
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className="button-quiet inline-flex items-center gap-1.5" data-testid="button-save-profile" onClick={saveCustomProfile}>
+                            <Save size={13} /> Save profile
+                          </button>
+                          <button type="button" className="button-quiet inline-flex items-center gap-1.5" onClick={deleteCurrentCustomProfile}>
+                            <Trash2 size={13} /> {form.drugId.startsWith('custom:') ? 'Delete' : 'Clear'}
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className="text-button inline-flex items-center gap-1.5" onClick={exportCustomProfiles}>
+                            <Download size={12} /> Export profiles
+                          </button>
+                          <button type="button" className="text-button inline-flex items-center gap-1.5" onClick={() => importInputRef.current?.click()}>
+                            <Upload size={12} /> Import profiles
+                          </button>
+                          <input ref={importInputRef} type="file" accept="application/json,.json" className="hidden" onChange={importCustomProfiles} />
+                        </div>
+                        {profileMessage ? <p className="text-[10px] leading-relaxed text-primary">{profileMessage}</p> : null}
+                      </div>
                    ) : null}
                  </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -601,6 +917,20 @@ function Home() {
             </div>
           </div>
 
+          {validationMessages.length ? (
+            <div className="mt-4 rounded-lg border border-destructive/35 bg-destructive/10 px-3 py-2.5 text-[10px] leading-relaxed text-destructive" role="alert">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-semibold">Check the highlighted model inputs</div>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {validationMessages.map((message) => <li key={message}>{message}</li>)}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <section className="section-card fade-up fade-up-2 mt-5 rounded-xl p-4 sm:p-5" data-testid="card-concentration-chart">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
               <div>
@@ -609,7 +939,7 @@ function Home() {
                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] text-primary">72 hours</span>
                 </div>
                <p className="mt-1 text-[11px] text-muted-foreground">
-                 Projected repeated bolus profile · target band {calculated.targetLow}–{calculated.targetHigh} mg/L · {selectedDrug?.targetType ?? 'illustrative reference window'} · immediate distribution
+                  Projected repeated bolus profile · target band {calculated.targetLow}–{calculated.targetHigh} mg/L · {selectedDrug?.targetType ?? form.customTargetType} · immediate distribution
                </p>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-muted-foreground">
@@ -639,12 +969,40 @@ function Home() {
             </div>
           </section>
 
+          <section className="section-card fade-up fade-up-3 mt-5 rounded-xl p-4 sm:p-5" data-testid="card-sensitivity">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="eyebrow">Stress test</div>
+                <h2 className="mt-1 text-[14px] font-bold tracking-tight text-foreground">Effluent sensitivity</h2>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  Modeled 24-hour concentration if delivered effluent is 50%, 100%, or 150% of the entered prescription.
+                </p>
+              </div>
+              <SlidersHorizontal size={16} className="text-primary" />
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {sensitivity.map((scenario) => (
+                <div key={scenario.multiplier} className="rounded-lg border border-border bg-muted/35 p-3">
+                  <div className="eyebrow">{scenario.label} effluent</div>
+                  <div className="mt-2 mono text-[15px] font-semibold text-primary">{formatNumber(scenario.concentration, 2)} <span className="text-[9px] font-normal text-muted-foreground">mg/L</span></div>
+                  <div className={`mt-1 text-[9px] font-semibold ${scenario.status === 'within target' ? 'text-primary' : scenario.status === 'above target' ? 'text-accent' : 'text-destructive'}`}>
+                    {scenario.status}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 flex items-start gap-2 text-[10px] leading-relaxed text-muted-foreground">
+              <Info size={13} className="mt-0.5 shrink-0 text-primary" />
+              This is a sensitivity view, not a confidence interval. It does not account for filter downtime, adsorption, or changing patient physiology.
+            </p>
+          </section>
+
           <div className="fade-up fade-up-3 mt-5 grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
             <section className="section-card rounded-xl p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="eyebrow">Read the curve</div>
-                  <h2 className="mt-1 text-[14px] font-bold tracking-tight">Selected checkpoints</h2>
+                  <h2 className="mt-1 text-[14px] font-bold tracking-tight text-foreground">Selected checkpoints</h2>
                 </div>
                 <SlidersHorizontal size={16} className="text-muted-foreground" />
               </div>
@@ -674,7 +1032,7 @@ function Home() {
               >
                 <div>
                   <div className="eyebrow">Model boundaries</div>
-                  <h2 className="mt-1 text-[14px] font-bold tracking-tight">Assumptions & disclaimer</h2>
+                  <h2 className="mt-1 text-[14px] font-bold tracking-tight text-foreground">Assumptions & disclaimer</h2>
                 </div>
                 <ChevronDown size={17} className={`mt-1 text-muted-foreground transition-transform ${showAssumptions ? 'rotate-180' : ''}`} />
               </button>
@@ -698,7 +1056,7 @@ function Home() {
           </div>
 
           <footer className="mt-6 flex flex-col justify-between gap-2 border-t border-border/70 pt-4 text-[10px] text-muted-foreground sm:flex-row">
-            <span className="mono">CRRT / PK · calculation state is local to this session</span>
+             <span className="mono">CRRT / PK · custom profiles stay on this device</span>
             <span className="inline-flex items-center gap-1.5"><ShieldCheck size={12} className="text-primary" /> Transparent assumptions shown above</span>
           </footer>
         </main>

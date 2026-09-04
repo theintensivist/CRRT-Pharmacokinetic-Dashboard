@@ -32,6 +32,8 @@ An interactive clinical reference surface for comparing modeled drug concentrati
 - This first version is client-side only; calculations update immediately from local state and require no API or database.
 - The ICU drug catalog is intentionally bundled with the app so the reference values remain available inside an iframe without network access to a drug database.
 - A `Custom drug profile` option lets users enter any drug name and override every PK input; custom profiles are labeled as user-entered and do not display catalog citations.
+- Custom profiles can include class, common use, renal/clinical notes, target window context, and are persisted locally with JSON import/export.
+- The dashboard includes a 50%/100%/150% effluent sensitivity stress test and visible validation warnings for invalid model inputs.
 - Endogenous clearance is entered directly in mL/min to avoid silently deriving a different renal-function estimate from demographics.
 - Sc and Sa are approximated from the unbound fraction; CVVH pre-filter dilution uses an explicit 0.75 factor because blood flow and replacement-fluid rates are not part of the requested inputs.
 - Repeated boluses are modeled with first-order elimination and plotted against an illustrative 8–16 mg/L target band.
